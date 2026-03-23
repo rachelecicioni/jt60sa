@@ -1,126 +1,197 @@
-#code from JDC
 import sys
-import shutil
 sys.path.append('/home/lgarzot/Work/Python/JET')
 
 from ppf import *
 import jetto_binary_tools
+import eproc as ep
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 
+# ============================================================
+# CONFIGURAZIONE GRAFICI
+# ============================================================
 plt.rcParams['lines.linewidth'] = 1.0
 plt.rcParams['axes.grid'] = True
 
 # ============================================================
-# Inserimento da terminale del run da analizzare
+# LISTA DELLE SIMULAZIONI DA PLOTTARE
 # ============================================================
-run_name = input("Inserisci il nome della cartella del run: ")
+'''
+jdir_list = [
+    "run_sa_fk_c_p20_a3_ArW_fc"
+]
+'''
+jdir_list = [
+    "run_sa_fk_c_p20_a3_ArW_pc_nv"
+]
 
 base_root = "/common/cmg/jnv7243/edge2d/runs"
-fname_jsp = f"{base_root}/{run_name}/jetto.jsp_savs"
 
 # ============================================================
-# Lettura del file .jsp_savs
+# FIGURA MULTI-PANNELLO
 # ============================================================
-jsp = jetto_binary_tools.read_binary_file(fname_jsp)
+fig, axs = plt.subplots(nrows=3, ncols=4, figsize=(18, 10), sharex=False)
+(
+    ax1, ax2, ax3, ax4,
+    ax5, ax6, ax7, ax8,
+    ax9, ax10, ax11, ax12
+) = axs.flatten()
 
 # ============================================================
-# Array dei tempi disponibili
+# CICLO SULLE SIMULAZIONI
 # ============================================================
-time_array = np.array(jsp["TIME"]).flatten()
-print("\nElenco degli istanti temporali con indice:")
-for idx, t in enumerate(time_array):
-    print(f"{idx:3d}: {t:.6f} s")
+for jdir in jdir_list:
+    print(f"Caricando simulazione: {jdir}")
+    base_path = f"{base_root}/{jdir}"
+
+    fname_jst = f"{base_path}/jetto.jst"
+    fname_sst1 = f"{base_path}/jetto.sst1"
+    fname_sst2 = f"{base_path}/jetto.sst2"
+    fname_jsp = f"{base_path}/jetto.jsp"
+    fname_tran = f"{base_path}/tran"
+
+    # ============================================================
+    # LETTURA FILES
+    # ============================================================
+    jst = jetto_binary_tools.read_binary_file(fname_jst)
+    sst1 = jetto_binary_tools.read_binary_file(fname_sst1)
+    sst2 = jetto_binary_tools.read_binary_file(fname_sst2)
+    jsp = jetto_binary_tools.read_binary_file(fname_jsp)
+
+    # ============================================================
+    # 1. Potenza radiata totale core
+    # ============================================================
+    time = np.array(jst["TVEC1"]).flatten()
+    prad = np.array(jst["PRAD"]).flatten()
+    ax1.plot(time, -prad * 1e-6, label=jdir)
+    ax1.set_ylabel('[MW]')
+    ax1.set_title(r'$P_{rad,core}$ (total)')
+    ax1.set_xlabel('time [s]')
+
+    # ============================================================
+    # 2. Impurity 1 power (Argon)
+    # ============================================================
+    time_imp1 = np.array(sst1["TVEC1"]).flatten()
+    prad_imp1 = np.array(sst1["PT"]).flatten()
+    ax5.plot(time_imp1, prad_imp1 * 1e-6, label=jdir)
+    ax5.set_ylabel('[MW]')
+    ax5.set_title(r'$P_{rad}$ Argon')
+    ax5.set_xlabel('time [s]')
+
+    # ============================================================
+    # 3. Impurity 2 power (Tungsten)
+    # ============================================================
+    time_imp2 = np.array(sst2["TVEC1"]).flatten()
+    prad_imp2 = np.array(sst2["PT"]).flatten()
+    ax9.plot(time_imp2, prad_imp2 * 1e-6, label=jdir)
+    ax9.set_ylabel('[MW]')
+    ax9.set_title(r'$P_{rad}$ Tungsten')
+    ax9.set_xlabel('time [s]')
+
+    # ============================================================
+    # 4. Densità elettronica TOB / SEP
+    # ============================================================
+    ne_tob = np.array(jst["NEBA"]).flatten()
+    ne_sep = np.array(jst["NEBO"]).flatten()
+    ax2.plot(time, ne_tob, label=fr'$n_{{e,TOB}}$ {jdir}')
+    ax2.plot(time, ne_sep, linestyle="--", label=fr'$n_{{e,SEP}}$ {jdir}')
+    ax2.axhline(y=3e19, color="red", linewidth=1.0, linestyle='--')
+    ax2.set_ylabel(r'$n_e$ [m$^{-3}$]')
+    ax2.set_title(r'$n_{e,TOB}$ / $n_{e,SEP}$')
+    ax2.set_xlabel('time [s]')
+
+    # ============================================================
+    # 5. Temperatura elettronica TOB / SEP
+    # ============================================================
+    te_tob = np.array(jst["TEBA"]).flatten() / 1e3
+    te_sep = np.array(jst["TEBO"]).flatten() / 1e3
+    ax6.plot(time, te_tob, label=fr'$T_{{e,TOB}}$ {jdir}')
+    ax6.plot(time, te_sep, linestyle="--", label=fr'$T_{{e,SEP}}$ {jdir}')
+    ax6.axhline(y=0.150, color="red", linewidth=1.0, linestyle='--')
+    ax6.set_ylabel('[keV]')
+    ax6.set_title(r'$T_{e,TOB}$ / $T_{e,SEP}$')
+    ax6.set_xlabel('time [s]')
+
+    # ============================================================
+    # 6. Temperatura ionica TOB / SEP
+    # ============================================================
+    ti_tob = np.array(jst["TIBA"]).flatten() / 1e3
+    ti_sep = np.array(jst["TIBO"]).flatten() / 1e3
+    ax10.plot(time, ti_tob, label=fr'$T_{{i,TOB}}$ {jdir}')
+    ax10.plot(time, ti_sep, linestyle="--", label=fr'$T_{{i,SEP}}$ {jdir}')
+    ax10.axhline(y=0.230, color="red", linewidth=1.0, linestyle='--')
+    ax10.set_ylabel('[keV]')
+    ax10.set_title(r'$T_{i,TOB}$ / $T_{i,SEP}$')
+    ax10.set_xlabel('time [s]')
+
+    # ============================================================
+    # 7. Profilo radiale di Zeff (ultimo timestep)
+    # ============================================================
+    idx_last = -1
+    rho = np.array(jsp["XRHO"][idx_last, :]).flatten()
+    zeff = np.array(jsp["ZEFF"][idx_last, :]).flatten()
+    ax3.plot(rho, zeff, label=jdir)
+    ax3.set_xlabel(r'$\rho$')
+    ax3.set_ylabel(r'$Z_{\mathrm{eff}}$')
+    ax3.set_title(r'$Z_{\mathrm{eff}}$ last timestep')
+
+    # ============================================================
+    # 8. QMAXIT
+    # ============================================================
+    result = ep.time(fname_tran, "QMAXIT")
+    ax7.plot(result.xData, np.array(result.yData) * 1e-6, label=jdir)
+    ax7.set_xlabel('time (s)')
+    ax7.set_ylabel('[MW/m²]')
+    ax7.set_xlim(61.5, 62.0)
+    ax7.set_title(r'$Q_{max,IT}$')
+
+    # ============================================================
+    # 9. QMAXOT
+    # ============================================================
+    result = ep.time(fname_tran, "QMAXOT")
+    ax11.plot(result.xData, np.array(result.yData) * 1e-6, label=jdir)
+    ax11.set_xlabel('time (s)')
+    ax11.set_ylabel('[MW/m²]')
+    ax11.set_xlim(61.5, 62.0)
+    ax11.set_title(r'$Q_{max,OT}$')
+
+    # ============================================================
+    # 10. Profilo radiale di Te (ultimo timestep)
+    # ============================================================
+    te = np.array(jsp["TE"][idx_last, :]).flatten()
+    ax4.plot(rho, te*1e-3, label=jdir)
+    ax4.set_xlabel(r'$\rho$')
+    ax4.set_ylabel('[keV]')
+    ax4.set_title(r'$T_e$ last timestep')
+
+    # ============================================================
+    # 11. Profilo radiale di Ti (ultimo timestep)
+    # ============================================================
+    ti = np.array(jsp["TI"][idx_last, :]).flatten()
+    ax8.plot(rho, ti*1e-3, label=jdir)
+    ax8.set_xlabel(r'$\rho$')
+    ax8.set_ylabel('[keV]')
+    ax8.set_title(r'$T_i$ last timestep')
+
+    # ============================================================
+    # 12. Profilo radiale di ne (ultimo timestep)
+    # ============================================================
+    ne = np.array(jsp["NE"][idx_last, :]).flatten()
+    ax12.plot(rho, ne, label=jdir)
+    ax12.set_xlabel(r'$\rho$')
+    ax12.set_ylabel('[m-3]')
+    ax12.set_title(r'$n_e$ last timestep')
 
 # ============================================================
-# Inserimento da terminale dell'indice da plottare
+# LEGENDA E FORMATTING
 # ============================================================
-selected_idx = int(input("\nInserisci l'indice del timestep da plottare: "))
-print(f"Selezionato timestep: index {selected_idx}, time {time_array[selected_idx]:.6f} s")
-
-# ============================================================
-# Preparazione figura per i profili
-# ============================================================
-fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(12, 8))
-ax_zeff, ax_te, ax_ti, ax_ne = axs.flatten()
-
-# Coordinate radiali
-psi_norm = np.array(jsp["XRHO"][selected_idx, :]).flatten()
-
-# ============================================================
-# ZEFF
-# ============================================================
-zeff = np.array(jsp["ZEFF"][selected_idx, :]).flatten()
-ax_zeff.plot(psi_norm, zeff, label=run_name)
-ax_zeff.set_xlabel('psi_norm')
-ax_zeff.set_ylabel('Z_eff')
-ax_zeff.set_title('Z_eff')
-
-# ============================================================
-# TE
-# ============================================================
-te = np.array(jsp["TE"][selected_idx, :]).flatten() * 1e-3  # keV
-ax_te.plot(psi_norm, te, label=run_name)
-ax_te.set_xlabel('psi_norm')
-ax_te.set_ylabel('T_e [keV]')
-ax_te.set_title('T_e')
-
-# ============================================================
-# TI
-# ============================================================
-ti = np.array(jsp["TI"][selected_idx, :]).flatten() * 1e-3  # keV
-ax_ti.plot(psi_norm, ti, label=run_name)
-ax_ti.set_xlabel('psi_norm')
-ax_ti.set_ylabel('T_i [keV]')
-ax_ti.set_title('T_i')
-
-# ============================================================
-# NE
-# ============================================================
-ne = np.array(jsp["NE"][selected_idx, :]).flatten()  # m^-3
-ax_ne.plot(psi_norm, ne, label=run_name)
-ax_ne.set_xlabel('psi_norm')
-ax_ne.set_ylabel('n_e [m^-3]')
-ax_ne.set_title('n_e')
-
-# ============================================================
-# Legende e layout
-# ============================================================
-for ax in [ax_zeff, ax_te, ax_ti, ax_ne]:
+for ax in [
+    ax1, ax2, ax3, ax4,
+    ax5, ax6, ax7, ax8,
+    ax9, ax10, ax11, ax12
+]:
     ax.legend(fontsize=7)
     ax.grid(True, alpha=0.4)
 
 plt.tight_layout()
 plt.show()
-
-# ============================================================
-# Creazione sottocartella per il run
-# ============================================================
-profiles_dir = "/home/jnv7243/JT-60SA/codes/profiles"
-run_save_dir = os.path.join(profiles_dir, run_name)
-os.makedirs(run_save_dir, exist_ok=True)
-
-# ============================================================
-# Salvataggio dei profili in file .txt
-# ============================================================
-outname = os.path.join(run_save_dir, f"profile_{run_name}.txt")
-
-with open(outname, "w") as f:
-    f.write("# psi_norm     Z_eff     n_e[m^-3]     T_e[keV]     T_i[keV]\n")
-    for ps, z, n, te_i, ti_i in zip(psi_norm, zeff, ne, te, ti):
-        f.write(f"{ps:12.6e}  {z:10.6f}  {n:12.6e}  {te_i:10.6e}  {ti_i:10.6e}\n")
-
-print(f"\nProfilo salvato in: {outname}")
-
-# ============================================================
-# Copia del file "jetto.eqdsk_out" nella sottocartella del run
-# ============================================================
-src_eqdsk = os.path.join(base_root, run_name, "jetto.eqdsk_out")
-dst_eqdsk = os.path.join(run_save_dir, "jetto.eqdsk_out")
-
-if os.path.exists(src_eqdsk):
-    shutil.copy(src_eqdsk, dst_eqdsk)
-    print(f"File 'jetto.eqdsk_out' copiato in: {dst_eqdsk}")
-else:
-    print(f"Attenzione: file 'jetto.eqdsk_out' non trovato in {src_eqdsk}")
